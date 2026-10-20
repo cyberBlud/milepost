@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { AwardCard } from './AwardCard';
@@ -60,6 +60,7 @@ function makeProgramme(opts: {
   applyResult?: 'ok' | 'alreadyApplied' | 'wrongPhase';
   releaseResult?: 'ok' | 'alreadyUsed' | 'invalidAttestation' | 'policyNotInstalled';
   withdrawError?: string;
+  minimumAward?: bigint;
 } = {}) {
   const allocation = opts.allocation ?? 10_000_000_000n;
   // Withdrawing flips the stored flag, as the contract does, so a re-read sees it.
@@ -102,6 +103,14 @@ function makeProgramme(opts: {
     })),
     get_phase: vi.fn(async () => ({
       result: { unwrap: () => ({ tag: opts.phase ?? 'Settled' }) },
+    })),
+    get_config: vi.fn(async () => ({
+      result: {
+        unwrap: () => ({
+          minimum_award: opts.minimumAward ?? 0n,
+          quorum: 3,
+        }),
+      },
     })),
     spend: vi.fn(),
     get_application: vi.fn(async () => ({
@@ -706,6 +715,72 @@ describe('Recipient Issues Suite (#272, #273, #274, #275)', () => {
 
       // The form stays on screen so the recipient can see the error — no receipt shown.
       expect(screen.queryByText(/✓ Application submitted/i)).toBeNull();
+    });
+  });
+
+  describe('Issue #554 — show the programme minimum on the apply form', () => {
+    async function renderRealApply(minimumAward: bigint) {
+      const { fetchProgrammes } = await import('../../lib/indexer');
+      (fetchProgrammes as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+        { id: REAL_PROGRAMME, name: 'Live Grant Round', creator: null, createdLedger: null },
+      ]);
+
+      programme = makeProgramme({ phase: 'Open', minimumAward });
+
+      render(
+        <MemoryRouter>
+          <ApplyForm />
+        </MemoryRouter>
+      );
+
+      await screen.findByText('Live Grant Round');
+      fireEvent.click(screen.getByRole('radio', { name: 'Live Grant Round' }));
+    }
+
+    it('warns below the minimum without blocking submission', async () => {
+      await renderRealApply(2_000_000_000n);
+
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1000' } });
+
+      expect(
+        await screen.findByText(/This is below the programme's minimum award of/i)
+      ).toBeDefined();
+      expect(
+        screen.getByText(/Your award is the median of reviewer votes, so it can only be finalized/i)
+      ).toBeDefined();
+
+      fireEvent.change(screen.getByRole('textbox', { name: /application notes/i }), {
+        target: { value: 'Bursary for term 1 fees.' },
+      });
+      expect(
+        (screen.getByRole('button', { name: /submit application/i }) as HTMLButtonElement).disabled
+      ).toBe(false);
+    });
+
+    it('shows the minimum but does not warn at or above it', async () => {
+      await renderRealApply(2_000_000_000n);
+
+      // The read has landed once the minimum is on screen.
+      expect(await screen.findByText('200.00 USDC')).toBeDefined();
+
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '200' } });
+      expect(screen.queryByText(/below the programme's minimum/i)).toBeNull();
+
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '250' } });
+      expect(screen.queryByText(/below the programme's minimum/i)).toBeNull();
+    });
+
+    it('shows no minimum when the programme has none', async () => {
+      await renderRealApply(0n);
+
+      await waitFor(() => expect(programme.get_config).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '1' } });
+      expect(screen.queryByText(/Minimum award:/)).toBeNull();
+      expect(screen.queryByText(/below the programme's minimum/i)).toBeNull();
     });
   });
 

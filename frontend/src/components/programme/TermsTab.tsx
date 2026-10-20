@@ -1,5 +1,6 @@
 import type { FC } from 'react';
 import { Link } from 'react-router-dom';
+import { formatAmount } from '../../lib/amount';
 import './TermsTab.css';
 
 /** The four payment modes, as `Mode` documents them in the program contract. */
@@ -26,12 +27,15 @@ export interface TermsTabProps {
   programmeId: string;
   quorum?: number;
   asset?: string;
+  /** Programme minimum in the programme's asset; `0n` means no minimum. */
+  minimumAward?: bigint;
 }
 
 export const TermsTab: FC<TermsTabProps> = ({
   programmeId,
   quorum = 1,
   asset = 'USDC',
+  minimumAward = 0n,
 }) => {
   const cappedQuorum = Math.min(Math.max(1, quorum), 16);
 
@@ -55,6 +59,16 @@ export const TermsTab: FC<TermsTabProps> = ({
       explanation:
         'After enough reviewers have voted, the submitted amounts are sorted and the middle value is selected to protect against outlier votes.',
     },
+    ...(minimumAward > 0n
+      ? [
+          {
+            k: 'Minimum award',
+            v: formatAmount(minimumAward, { asset }),
+            explanation:
+              'The award is the median of reviewer votes. A median below this amount cannot be finalized.',
+          },
+        ]
+      : []),
     {
       k: 'Unpaid money',
       v: 'Refunded in proportion, then swept after a grace period',

@@ -2,6 +2,7 @@ import { useState, useId } from 'react';
 import { Link } from 'react-router-dom';
 import { Buffer } from 'buffer';
 import { useOpenProgrammes } from '../../hooks/useOpenProgrammes';
+import { useContractResult } from '../../hooks/useContractRead';
 import { useTransaction } from '../../hooks/useTransaction';
 import { useWallet } from '../../context/useWallet';
 import { useSoroban } from '../../context/useSoroban';
@@ -86,6 +87,19 @@ export function ApplyForm({
       ? selectedProgrammeId
       : allOpen[0]?.id ?? '';
 
+  const selectedProgramme = allOpen.find((p) => p.id === effectiveSelection);
+  const selectedIsSample =
+    Boolean(selectedProgramme?.sample) || isSampleProgrammeId(effectiveSelection);
+
+  // The programme's minimum is on-chain config. Samples have no contract, so
+  // they have no minimum to read.
+  const config = useContractResult(
+    () => programmeAt(effectiveSelection).get_config(),
+    [effectiveSelection, selectedIsSample],
+    { enabled: Boolean(effectiveSelection) && !selectedIsSample },
+  );
+  const minimumAward = selectedIsSample ? 0n : (config.data?.minimum_award ?? 0n);
+
   // Amount validation using the project's existing parseAmount util.
   const amountResult = amountInput.trim()
     ? (() => {
@@ -103,6 +117,11 @@ export function ApplyForm({
     amountResult?.ok === true &&
     Boolean(effectiveSelection) &&
     notes.trim().length > 0;
+
+  // A warning, not a validation failure: reviewers may still vote above the
+  // minimum, so the application is allowed through.
+  const belowMinimum =
+    amountResult?.ok === true && minimumAward > 0n && amountResult.value < minimumAward;
 
   const tx = useTransaction<ApplyReceipt>({ contract: 'program' });
 
@@ -295,6 +314,25 @@ export function ApplyForm({
               Ask for what you actually need. Reviewers can approve up to this
               amount, not more. Your award is the middle of their votes.
             </span>
+            {minimumAward > 0n && (
+              <span className="apply-form__minimum">
+                Minimum award:{' '}
+                <span className="numeric">
+                  {formatAmount(minimumAward, { asset: 'USDC' })}
+                </span>
+              </span>
+            )}
+            {belowMinimum && (
+              <span className="apply-form__warning" role="status">
+                This is below the programme&apos;s minimum award of{' '}
+                <strong className="numeric">
+                  {formatAmount(minimumAward, { asset: 'USDC' })}
+                </strong>
+                . Your award is the median of reviewer votes, so it can only be
+                finalized if enough votes land at or above the minimum. You can
+                still submit.
+              </span>
+            )}
             <span role="alert" className="apply-form__error" aria-live="polite">
               {amountError}
             </span>

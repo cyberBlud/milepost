@@ -318,6 +318,37 @@ describe('Issue #267 - TermsTab component', () => {
   });
 });
 
+describe('Issue #554 - minimum award in the programme terms', () => {
+  it('shows the minimum when the programme sets one', () => {
+    render(
+      <MemoryRouter>
+        <TermsTab
+          programmeId="prog-xyz"
+          quorum={3}
+          asset="XLM"
+          minimumAward={2_000_000_000n}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Minimum award')).toBeDefined();
+    expect(screen.getByText('200.00 XLM')).toBeDefined();
+    expect(
+      screen.getByText(/A median below this amount cannot be finalized/),
+    ).toBeDefined();
+  });
+
+  it('shows no minimum row when the programme has none', () => {
+    render(
+      <MemoryRouter>
+        <TermsTab programmeId="prog-xyz" minimumAward={0n} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText('Minimum award')).toBeNull();
+  });
+});
+
 describe('ProgrammeTabs wrapper component', () => {
   it('allows switching between Awards, Verifiers, and Terms tabs with keyboard accessibility', () => {
     render(

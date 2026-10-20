@@ -161,6 +161,25 @@
   color: var(--text-muted);
 }
 
+.apply-form__minimum {
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+  color: var(--text);
+}
+
+.apply-form__warning {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-input);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  font-size: var(--text-caption);
+  line-height: var(--leading-body);
+}
+
+.apply-form__warning strong {
+  font-weight: var(--weight-bold);
+}
+
 .apply-form__error {
   font-size: var(--text-caption);
   color: var(--refund);

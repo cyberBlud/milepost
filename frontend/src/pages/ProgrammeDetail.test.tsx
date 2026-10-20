@@ -49,6 +49,7 @@ interface TestConfig {
   quorum: number;
   tranches: number;
   fee_bps: number;
+  minimum_award: bigint;
   metadata_hash: Buffer;
   schema: Buffer;
 }
@@ -65,6 +66,7 @@ function makeConfig(overrides: Partial<TestConfig> = {}): TestConfig {
     quorum: 3,
     tranches: 3,
     fee_bps: 200,
+    minimum_award: 0n,
     metadata_hash: Buffer.from('ab'.repeat(32), 'hex'),
     schema: Buffer.from('cd'.repeat(32), 'hex'),
     ...overrides,
@@ -190,6 +192,19 @@ describe('ProgrammeDetail — a deployed programme', () => {
     expect(screen.getByLabelText('Metadata document URL')).toBeTruthy();
     // Renders the whole page with every read; slow on a loaded CI runner.
   }, 20_000);
+
+  it('passes the on-chain minimum award through to the Terms tab', async () => {
+    programme.get_config.mockImplementation(() =>
+      unwrap(makeConfig({ minimum_award: 2_000_000_000n })),
+    );
+    renderProgramme(`/programme/${REAL_ID}`);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Terms' }));
+
+    expect(await screen.findByText('Minimum award')).toBeTruthy();
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByText('200.00 XLM')).toBeTruthy();
+  });
 
   it('says when it is showing the seeded demo programme', async () => {
     renderProgramme('/programme');
